@@ -1,7 +1,7 @@
 % Optimization Parameters
 n = 9; % Length - 1 of signal vector
-alpha = 1; % Weight for power term
-beta = 0; % Weight for bandwidth term
+alpha = 1; % Weight for power term --> as alpha approaches 0, we get a flat plot at A
+beta = 1; % Weight for bandwidth term --> as beta approaches 0, we get a whole variety of codes to test
 A = 0.9; % Min average
 B = 0.938; % Max average
 v_min = 0; % Min voltage
@@ -13,7 +13,7 @@ D = spdiags([-e e], [0 1], n-1, n);
 DtD = D' * D;
 
 % Initialize v
-rng(1);  % for reproducibility
+rng(1); % for reproducibility
 v = 0.5 + 0.1 * randn(n,1);
 v = min(max(v, v_min), v_max);
 
@@ -21,7 +21,7 @@ v = min(max(v, v_min), v_max);
 max_iter = 5000;
 step_size = 0.1;
 tolerance = 1e-6;
-decay = 0.995;  % decay factor for learning rate
+decay = 0.995; % decay factor for learning rate
 
 for iter = 1:max_iter
     % Compute terms
@@ -73,21 +73,54 @@ if iter == max_iter
     fprintf('Reached maximum iterations.\n');
 end
 
-% Final evaluations
+% Final metrics
 power = (1/n) * sum(v.^2);
 bandwidth = sum((v(2:end) - v(1:end-1)).^2);
 objective = alpha * log(power) + beta * log(bandwidth);
 
-fprintf('\nFinal Results:\n');
-fprintf('Objective: %f\n', objective);
 fprintf('Average voltage: %f (constraint [%f, %f])\n', mean(v), A, B);
-fprintf('Signal power: %f\n', power);
-fprintf('Bandwidth: %f\n', bandwidth);
 
-% Plot
 figure;
 plot(v, '-o');
 xlabel('Slice');
 ylabel('Voltage Level');
 title('Optimized Signal (Minimizing Power × Bandwidth)');
+grid on;
+
+% Notes:
+% Almost all outputs are symmetric. Only when beta = 0 does the output lose its symmetry.
+
+% Plot power spectral density (PSD) of sequence to determine noise bandwidth
+Fc = 402e6;
+T = 2e-6;
+N = (length(v) + 1);
+v1_multiplier = 1 / (1 - exp(-2 / 3.1));
+
+Fs = 1 / T;
+t = 0:1/Fs:N;
+t = t(1 : end - 1);
+
+% Extend voltage vector into something multiply-able with the OOK carrier
+v_unit_extended = ones(1, floor(length(t) / (length(v) + 1)));
+v_extended = [];
+for i = 1:(length(v) + 1)
+    if i == 1
+        extension = v_unit_extended * v1_multiplier; 
+        v_extended = [v_extended, extension];
+    else
+        extension = v_unit_extended * v(i - 1);
+        v_extended = [v_extended, extension];
+    end
+end
+
+carrier = sind(2 * pi * Fc .* t);
+s = carrier .* v_extended;
+
+% Compute and plot PSD
+[pxx, f] = pwelch(s, [], [], [], Fs);
+figure;
+plot(f/1e6, 10 * log10(pxx));
+xlabel('Frequency (MHz)');
+ylabel('Power/Frequency (dB/Hz)');
+title('PSD of Power-Coded OOK Signal');
 grid on;
