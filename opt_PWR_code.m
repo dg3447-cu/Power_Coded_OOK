@@ -90,7 +90,7 @@ N = (length(v) + 1);
 v1_multiplier = 1 / (1 - exp(-2 / 3.1));
 
 Fs = 1 / T;
-t = 0:1/Fs:N;
+t = 0:1/Fs:2*N;
 t = t(1 : end - 1);
 
 % Extend voltage vector into something multiply-able with the OOK carrier
@@ -121,27 +121,26 @@ S_mag = abs(S)/L; % magnitude normalized
 % Plot all figures on one figure using subplots
 figure;
 
-% Plot 1: Optimized voltage configuration
-subplot(3,1,1);
+% Plot 1: Power-coded waveform
+subplot(3, 1, 1);
+plot(t, s);
+xlabel('Time (us)');
+ylabel('Signal');
+title('Power Coded OOK Signal');
+grid on;
+
+% Plot 2: Optimized voltage configuration
+subplot(3, 1, 2);
 plot(v, '-o');
 xlabel('Slice');
 ylabel('Voltage Level');
 title('Optimized Signal (Minimizing Power × Bandwidth)');
 grid on;
 
-% Plot 2: PSD of power-coded waveform
-subplot(3,1,2);
+% Plot 3: PSD of power-coded waveform
+subplot(3, 1, 3);
 plot(f/1e6, 10 * log10(pxx));
 xlabel('Frequency (MHz)');
 ylabel('Power/Frequency (dB/Hz)');
 title('PSD of Power-Coded OOK Signal');
-grid on;
-
-% Plot 3: Magnitude of Fourier Transform of power-coded waveform
-subplot(3,1,3);
-plot(f_fft/1e6, S_mag);
-xlim([0 max(f_fft)/1e6/2]); % plot only up to Nyquist frequency
-xlabel('Frequency (MHz)');
-ylabel('Magnitude');
-title('Magnitude of Fourier Transform of Signal s');
 grid on;
