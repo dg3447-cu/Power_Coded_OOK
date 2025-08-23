@@ -143,4 +143,4 @@ plot(f/1e6, 10 * log10(pxx));
 xlabel('Frequency (MHz)');
 ylabel('Power/Frequency (dB/Hz)');
 title('PSD of Power-Coded OOK Signal');
-grid on;
+grid on; xlim([0, 0.05]);
