@@ -1,5 +1,5 @@
 % Parameters
-message = [0 1 1 0];
+message = [1 1 0 0];
 msg_length = length(message);
 num_subcarriers = 4;
 bits_per_subcarrier = msg_length / num_subcarriers;
@@ -46,13 +46,16 @@ for k = 1:num_subcarriers
     carrier_wave = sin(2 * pi * subcarriers(k) * t_bit);
     
     % For each bit, assign the carrier wave or zeros
+    check_edge_cases = sum(subcarrier_matrix);
     for bit_idx = 1:bits_per_subcarrier
         start_sample = (bit_idx-1) * samples_per_bit + 1;
         end_sample = bit_idx * samples_per_bit;
         
-        if bits(bit_idx) == 1
+        if (bits(bit_idx) == 1) && (check_edge_cases(bit_idx) ~= 1)
             % insert the pre-computed carrier wave segment
             signal_matrix(k, start_sample:end_sample) = carrier_wave;
+        else % AM modulate the signal instead of it's an edge case
+            signal_matrix(k, start_sample:end_sample) = carrier_wave .* sin(2 * pi * k * t_bit);
         end
     end
 end
