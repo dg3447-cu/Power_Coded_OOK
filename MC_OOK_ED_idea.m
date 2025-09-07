@@ -1,5 +1,5 @@
 % Parameters
-message = [1 1 0 0];
+message = [1 0 0 0];
 msg_length = length(message);
 num_subcarriers = 4;
 bits_per_subcarrier = msg_length / num_subcarriers;
@@ -55,7 +55,15 @@ for k = 1:num_subcarriers
             % insert the pre-computed carrier wave segment
             signal_matrix(k, start_sample:end_sample) = carrier_wave;
         else % AM modulate the signal instead of it's an edge case
-            signal_matrix(k, start_sample:end_sample) = carrier_wave .* sin(2 * pi * k * t_bit);
+            % Edge case = if the sum of all elements in a column of the subcarrier matrix equals 1
+            edge_code = subcarrier_matrix(:, bit_idx);
+            subcarrier_loc = 0;
+            for l = 1:length(edge_code)
+                if edge_code(l) == 1
+                    subcarrier_loc = l;
+                end
+            end
+            signal_matrix(k, start_sample:end_sample) = carrier_wave .* sin(2 * pi * (subcarrier_loc * 1000000) * t_bit);
         end
     end
 end
@@ -119,10 +127,3 @@ title("FFT of Envelope");
 
 zoom = 30; 
 xlim([-zoom zoom]);
-
-% Notes:
-% All DFTs are unique and can be mapped to unique codes, OUTSIDE OF the
-% edge case that only a single 1 is present in the OFDM symbol
-% Solution: for each OFDM symbol that only contains one 1, transmit a
-% custom AM signal (instead of OOK), envelope detect that, and map the DFT
-% of the result to the corresponding source code.
