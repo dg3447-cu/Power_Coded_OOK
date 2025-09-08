@@ -104,7 +104,8 @@ num_dft_points = 16;
 sample_indices = round(linspace(1, length(amplitude_envelope), num_dft_points));
 dft_input = amplitude_envelope(sample_indices);
 DFT_16 = fft(dft_input, 16);
-f_16 = (0:15) * (Fs / 16);  % Frequency in Hz
+Fs_X = 1 / dt;                  % Sampling frequency of the envelope signal
+f_16 = (0:15) * (Fs_X / 16);   % Frequencies for 16-point DFT bins, within Nyquist
 
 % === Second Figure: Envelope + FFT + 16-point DFT ===
 figure;
@@ -128,8 +129,8 @@ xlim([-30 30]);
 
 % 3. 16-Point DFT
 subplot(3, 1, 3);
-stem(f_16 / 1e6, abs(DFT_16)/max(abs(DFT_16)), 'filled', 'LineWidth', 1.2);
-xlabel('Frequency (MHz)');
-ylabel('Magnitude');
+stem([0:15], abs(DFT_16) / max(abs(DFT_16)), 'filled', 'LineWidth', 1.2);
+xlabel('DFT Samples');
+ylabel('Normalized Magnitude');
 title('Normalized 16-Point DFT of Envelope');
 grid on;
