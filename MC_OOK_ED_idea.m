@@ -1,12 +1,12 @@
 % === Parameters ===
-message = [0 1 1 0];  % Modify this as needed
+message = [0 1 1 0];
 msg_length = length(message);
 num_subcarriers = 4;
 bits_per_subcarrier = msg_length / num_subcarriers;
 
 % RF parameters
-carrier_freq = 400e6; % Center frequency
-BW = 10e6;            % Bandwidth
+carrier_freq = 400e6;
+BW = 10e6; 
 
 % Coherent sampling parameters
 cycles_per_bit = 100;
@@ -133,8 +133,8 @@ xlim([-30 30]);
 
 % 3. 16-Point DFT
 subplot(3, 1, 3);
-stem(f_16 / 1e6, abs(DFT_16) / max(abs(DFT_16)), 'filled', 'LineWidth', 1.2);
-xlabel('Frequency (MHz)');
+stem([0:15], abs(DFT_16) / max(abs(DFT_16)), 'filled', 'LineWidth', 1.2);
+xlabel('DFT Samples');
 ylabel('Normalized Magnitude');
 title('Normalized 16-Point DFT of Envelope');
-grid on;
+grid;
