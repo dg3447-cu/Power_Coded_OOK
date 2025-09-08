@@ -1,12 +1,12 @@
 % === Parameters ===
-message = [1 0 1 0];
+message = [0 1 1 0];  % Modify this as needed
 msg_length = length(message);
 num_subcarriers = 4;
 bits_per_subcarrier = msg_length / num_subcarriers;
 
 % RF parameters
 carrier_freq = 400e6; % Center frequency
-BW = 10e6; % Bandwidth
+BW = 10e6;            % Bandwidth
 
 % Coherent sampling parameters
 cycles_per_bit = 100;
@@ -51,11 +51,16 @@ for k = 1:num_subcarriers
             % Normal: assign carrier
             signal_matrix(k, start_sample:end_sample) = carrier_wave;
         else
-            % Edge case
+            % Edge case or zero
             edge_code = subcarrier_matrix(:, bit_idx);
-            subcarrier_loc = find(edge_code == 1, 1);  % Ensure scalar
-            mod_wave = sin(2 * pi * (subcarrier_loc * 1e6) * t_bit);  % Row vector
-            signal_matrix(k, start_sample:end_sample) = carrier_wave .* mod_wave;
+            if any(edge_code == 1)
+                subcarrier_loc = find(edge_code == 1, 1);  % First active subcarrier
+                mod_wave = sin(2 * pi * (subcarrier_loc * 1e6) * t_bit);
+                signal_matrix(k, start_sample:end_sample) = carrier_wave .* mod_wave;
+            else
+                % No active subcarriers — assign silence
+                signal_matrix(k, start_sample:end_sample) = zeros(size(t_bit));
+            end
         end
     end
 end
@@ -104,7 +109,6 @@ num_dft_points = 16;
 sample_indices = round(linspace(1, length(amplitude_envelope), num_dft_points));
 dft_input = amplitude_envelope(sample_indices);
 DFT_16 = fft(dft_input, 16);
-Fs_X = 1 / dt;                  % Sampling frequency of the envelope signal
 f_16 = (0:15) * (Fs_X / 16);   % Frequencies for 16-point DFT bins, within Nyquist
 
 % === Second Figure: Envelope + FFT + 16-point DFT ===
@@ -129,8 +133,8 @@ xlim([-30 30]);
 
 % 3. 16-Point DFT
 subplot(3, 1, 3);
-stem([0:15], abs(DFT_16) / max(abs(DFT_16)), 'filled', 'LineWidth', 1.2);
-xlabel('DFT Samples');
+stem(f_16 / 1e6, abs(DFT_16) / max(abs(DFT_16)), 'filled', 'LineWidth', 1.2);
+xlabel('Frequency (MHz)');
 ylabel('Normalized Magnitude');
 title('Normalized 16-Point DFT of Envelope');
 grid on;
