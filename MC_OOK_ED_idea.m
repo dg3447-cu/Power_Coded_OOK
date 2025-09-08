@@ -1,5 +1,5 @@
-% Parameters
-message = [1 0 0 0];
+% === Parameters ===
+message = [1 0 1 0];
 msg_length = length(message);
 num_subcarriers = 4;
 bits_per_subcarrier = msg_length / num_subcarriers;
@@ -39,39 +39,32 @@ end
 signal_matrix = zeros(num_subcarriers, total_samples);
 
 for k = 1:num_subcarriers
-    % Get the bit sequence for this subcarrier
     bits = subcarrier_matrix(k, :);
-    
-    % Create the base carrier wave for one *complete, seamless* bit period
-    carrier_wave = sin(2 * pi * subcarriers(k) * t_bit);
-    
-    % For each bit, assign the carrier wave or zeros
-    check_edge_cases = sum(subcarrier_matrix);
+    carrier_wave = sin(2 * pi * subcarriers(k) * t_bit);  % row vector
+    check_edge_cases = sum(subcarrier_matrix);  % column-wise sum
+
     for bit_idx = 1:bits_per_subcarrier
         start_sample = (bit_idx-1) * samples_per_bit + 1;
         end_sample = bit_idx * samples_per_bit;
         
         if (bits(bit_idx) == 1) && (check_edge_cases(bit_idx) ~= 1)
-            % insert the pre-computed carrier wave segment
+            % Normal: assign carrier
             signal_matrix(k, start_sample:end_sample) = carrier_wave;
-        else % AM modulate the signal instead of it's an edge case
-            % Edge case = if the sum of all elements in a column of the subcarrier matrix equals 1
+        else
+            % Edge case
             edge_code = subcarrier_matrix(:, bit_idx);
-            subcarrier_loc = 0;
-            for l = 1:length(edge_code)
-                if edge_code(l) == 1
-                    subcarrier_loc = l;
-                end
-            end
-            signal_matrix(k, start_sample:end_sample) = carrier_wave .* sin(2 * pi * (subcarrier_loc * 1000000) * t_bit);
+            subcarrier_loc = find(edge_code == 1, 1);  % Ensure scalar
+            mod_wave = sin(2 * pi * (subcarrier_loc * 1e6) * t_bit);  % Row vector
+            signal_matrix(k, start_sample:end_sample) = carrier_wave .* mod_wave;
         end
     end
 end
 
-% Combine all subcarriers into one signal (MC-OOK)
+% Combine subcarriers
 sig_MC_OOK = sum(signal_matrix, 1);
 
-% Plot all four individual subcarriers
+% === Plot individual subcarriers ===
+figure;
 for k = 1:num_subcarriers
     subplot(5, 1, k);
     plot(t * 1e6, signal_matrix(k, :), 'LineWidth', 1.2);
@@ -85,45 +78,58 @@ for k = 1:num_subcarriers
     end
 end
 
-% Plot the combined MC-OOK signal
 subplot(5, 1, 5);
 plot(t * 1e6, sig_MC_OOK, 'LineWidth', 1.5, 'Color', [0.8, 0.2, 0.2]);
 xlabel('Time (µs)');
 ylabel('Amplitude');
 title('Combined MC-OOK Signal (Sum of all 4 Subcarriers)', 'FontWeight', 'bold');
 
-% Calculate the upper envelope of the MC-OOK signal using the Hilbert transform
+% === Envelope using Hilbert Transform ===
 analytic_signal = hilbert(sig_MC_OOK);
 amplitude_envelope = abs(analytic_signal);
 
+% === High-Resolution FFT ===
+N = length(amplitude_envelope);
+dt = t(2) - t(1);
+Fs_X = 1/dt;
+padding_factor = 4;
+N_fft = padding_factor * N;
+X = fft(amplitude_envelope, N_fft);
+X_shifted = fftshift(X);
+f = (-N_fft / 2 : N_fft / 2 - 1) * (Fs_X / N_fft);
+X_magnitude = abs(X_shifted) / N;
+
+% === 16-point DFT (for on-chip implementation) ===
+num_dft_points = 16;
+sample_indices = round(linspace(1, length(amplitude_envelope), num_dft_points));
+dft_input = amplitude_envelope(sample_indices);
+DFT_16 = fft(dft_input, 16);
+f_16 = (0:15) * (Fs / 16);  % Frequency in Hz
+
+% === Second Figure: Envelope + FFT + 16-point DFT ===
 figure;
-subplot(2, 1, 1)
+
+% 1. Envelope
+subplot(3, 1, 1);
 plot(t * 1e6, amplitude_envelope, 'r-', 'LineWidth', 1.5);
 xlabel('Time (µs)');
 ylabel('Amplitude');
 title('Upper Envelope of MC-OOK Signal');
 grid on;
 
-% === High-Resolution FFT (using zero-padding) ===
-N = length(amplitude_envelope);
-dt = t(2) - t(1);
-Fs_X = 1/dt;
-
-% Zero-padding factor
-padding_factor = 10; % Improve resoltion with zero padding
-N_fft = padding_factor * N;
-
-% Perform zero-padded FFT
-X = fft(amplitude_envelope, N_fft);
-X_shifted = fftshift(X);
-f = (-N_fft / 2 : N_fft / 2 - 1) * (Fs_X / N_fft);
-X_magnitude = abs(X_shifted) / N;
-
-subplot(2, 1, 2)
+% 2. Ideal FFT
+subplot(3, 1, 2);
 plot(f / 1e6, X_magnitude, 'b', 'LineWidth', 1.2);
 xlabel('Frequency (MHz)');
 ylabel('Magnitude');
-title("FFT of Envelope");
+title('High-Resolution FFT of Envelope');
+grid on;
+xlim([-30 30]);
 
-zoom = 30; 
-xlim([-zoom zoom]);
+% 3. 16-Point DFT
+subplot(3, 1, 3);
+stem(f_16 / 1e6, abs(DFT_16)/max(abs(DFT_16)), 'filled', 'LineWidth', 1.2);
+xlabel('Frequency (MHz)');
+ylabel('Magnitude');
+title('Normalized 16-Point DFT of Envelope');
+grid on;
