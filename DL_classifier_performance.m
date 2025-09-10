@@ -1,14 +1,13 @@
-% Test script that evaluates the performance of the neural network
-
-clear; clc; close all;
+%% Neural Network Tester for MC-OOK Classification - MCU OPTIMIZED
+clc; clear; close all;
 
 % === LOAD TRAINED NETWORK ===
-load('mc_ook_classifier_optimized.mat'); % Loads net, X_mean, X_std, all_messages
+load('mcu_optimized_classifier.mat'); % Loads net, X_mean, X_std, all_messages
 
 % === TEST PARAMETERS ===
 num_tests = 16; % Test all 16 messages
 num_noisy_trials = 10; % Number of noise realizations per message
-SNR_dB = 5; % Signal-to-Noise Ratio for testing
+SNR_dB = 20; % Signal-to-Noise Ratio for testing
 
 % === RF PARAMETERS (Must match training) ===
 num_subcarriers = 4;
@@ -16,6 +15,7 @@ carrier_freq = 400e6;
 BW = 10e6;
 cycles_per_bit = 100;
 samples_per_cycle = 20;
+num_dft_points = 16; % Only 16 features now
 Fs = carrier_freq * samples_per_cycle;
 Ts = 1 / Fs;
 samples_per_bit = round(cycles_per_bit * (Fs / carrier_freq));
@@ -31,7 +31,7 @@ end
 % === TEST ALL MESSAGES ===
 test_results = struct();
 
-fprintf('Testing neural network on %d messages with %d noise trials each...\n', ...
+fprintf('Testing MCU-optimized neural network on %d messages with %d noise trials each...\n', ...
         num_tests, num_noisy_trials);
 
 % Store example data for plotting
@@ -45,11 +45,11 @@ for test_idx = 1:num_tests
             test_idx, true_message);
     
     for trial = 1:num_noisy_trials
-        % === GENERATE AND EXTRACT ALL FEATURES (like training) ===
-        [all_features, noisy_env] = extract_all_features(true_message, SNR_dB, carrier_waves, samples_per_bit);
+        % === GENERATE MCU-FRIENDLY FEATURES (16-point DFT only) ===
+        [features, noisy_env] = extract_features_mcu(true_message, SNR_dB, carrier_waves, samples_per_bit, num_dft_points);
         
         % === PREPROCESS (Normalize using training statistics) ===
-        features_normalized = (all_features - X_mean) ./ X_std;
+        features_normalized = (features - X_mean) ./ X_std;
         features_normalized(isnan(features_normalized)) = 0;
         
         % === PREDICT USING NEURAL NETWORK ===
@@ -65,14 +65,10 @@ for test_idx = 1:num_tests
         
         % Store data from first trial for plotting
         if trial == 1
-            % Extract just the DFT part for plotting (first 16 features after envelope)
-            dft_features = all_features(21:36); % Positions 21-36 are DFT magnitudes
-            dft_normalized = features_normalized(21:36);
-            
             example_data.true_message = true_message;
             example_data.noisy_env = noisy_env;
-            example_data.dft_features = dft_features;
-            example_data.dft_normalized = dft_normalized;
+            example_data.dft_features = features; % Already the 16 DFT features
+            example_data.dft_normalized = features_normalized;
             example_data.predicted_bits = predicted_bits;
             example_data.is_correct = is_correct;
             
@@ -96,15 +92,16 @@ fprintf('\n=== OVERALL RESULTS ===\n');
 overall_accuracy = mean([test_results.accuracy]);
 fprintf('Overall Accuracy: %.1f%%\n', overall_accuracy);
 fprintf('SNR: %d dB\n', SNR_dB);
+fprintf('Feature size: %d (MCU-optimized)\n', num_dft_points);
 
 % === PLOT EXAMPLE RESULTS ===
 if ~isempty(example_data)
-    plot_example_results(example_data, Fs, 16, SNR_dB); % 16 DFT points
+    plot_example_results(example_data, Fs, num_dft_points, SNR_dB);
 end
 
-% === HELPER FUNCTIONS ===
-function [all_features, noisy_env] = extract_all_features(message, snr_db, carrier_waves, samples_per_bit)
-    % Generate MC-OOK signal with specified SNR
+% === MCU-FRIENDLY FEATURE EXTRACTION FUNCTION ===
+function [features, noisy_env] = extract_features_mcu(message, snr_db, carrier_waves, samples_per_bit, num_dft_points)
+    % Generate signal
     signal_matrix = zeros(4, samples_per_bit);
     for k = 1:4
         if message(k) == 1
@@ -112,59 +109,40 @@ function [all_features, noisy_env] = extract_all_features(message, snr_db, carri
         end
     end
     
-    sig_MC_OOK = sum(signal_matrix, 1);
-    sig_MC_OOK_noisy = awgn(sig_MC_OOK, snr_db, 'measured');
+    sig_clean = sum(signal_matrix, 1);
+    sig_noisy = awgn(sig_clean, snr_db, 'measured');
     
-    % Envelope detection
-    analytic_signal = hilbert(sig_MC_OOK_noisy);
-    noisy_env = abs(analytic_signal);
+    % Store the noisy envelope for plotting
+    noisy_env = abs(sig_noisy);
     
-    % --- Extract ALL features (must match training exactly) ---
-    all_features = [];
+    % Simple envelope detection (abs is cheap on MCU)
+    envelope = abs(sig_noisy);
     
-    % 1. Fixed number of envelope samples (20 points)
-    env_samples = 20;
-    if length(noisy_env) >= env_samples
-        all_features = [all_features, noisy_env(1:env_samples)];
-    else
-        % Pad if shorter
-        padded = [noisy_env, zeros(1, env_samples - length(noisy_env))];
-        all_features = [all_features, padded];
+    % Downsample to 16 points (MCU-friendly averaging)
+    downsampled = zeros(1, num_dft_points);
+    samples_per_bin = floor(length(envelope) / num_dft_points);
+    for i = 1:num_dft_points
+        start_idx = (i-1)*samples_per_bin + 1;
+        end_idx = min(i*samples_per_bin, length(envelope));
+        downsampled(i) = mean(envelope(start_idx:end_idx));
     end
     
-    % 2. Fixed DFT points (16)
-    dft_points = 16;
-    dft_magnitude = abs(fft(noisy_env, dft_points));
-    all_features = [all_features, dft_magnitude];
+    % 16-point DFT (the main feature extraction)
+    dft_magnitude = abs(fft(downsampled, num_dft_points));
     
-    % 3. Spectral features (3)
-    power_spectrum = dft_magnitude.^2;
-    frequencies = 0:(dft_points-1);
-    
-    spectral_centroid = sum(frequencies .* power_spectrum) / (sum(power_spectrum) + 1e-6);
-    spectral_spread = sqrt(sum(((frequencies - spectral_centroid).^2) .* power_spectrum) / (sum(power_spectrum) + 1e-6));
-    
-    geometric_mean = exp(mean(log(dft_magnitude + 1e-6)));
-    arithmetic_mean = mean(dft_magnitude);
-    spectral_flatness = geometric_mean / (arithmetic_mean + 1e-6);
-    
-    all_features = [all_features, spectral_centroid, spectral_spread, spectral_flatness];
-    
-    % 4. Statistical features (4)
-    stats = [mean(noisy_env), std(noisy_env), ...
-             skewness(noisy_env), kurtosis(noisy_env)];
-    all_features = [all_features, stats];
-    
-    % Ensure exact size (43 features)
-    target_size = 20 + 16 + 3 + 4;
-    if length(all_features) > target_size
-        all_features = all_features(1:target_size);
-    elseif length(all_features) < target_size
-        all_features = [all_features, zeros(1, target_size - length(all_features))];
+    % MCU-friendly normalization: remove DC, scale to [0,1]
+    dft_magnitude = dft_magnitude - min(dft_magnitude);
+    if max(dft_magnitude) > 0
+        dft_magnitude = dft_magnitude / max(dft_magnitude);
     end
+    
+    features = dft_magnitude;
 end
 
 function plot_example_results(example_data, Fs, num_dft_points, snr_db)
+    % Plot results for the example data
+    figure('Name', 'MCU-Optimized Neural Network Test Results', 'NumberTitle', 'off', ...
+           'Position', [100, 100, 1000, 800]);
     
     % 1. Noisy Envelope Signal
     subplot(3, 2, 1);
@@ -196,11 +174,11 @@ function plot_example_results(example_data, Fs, num_dft_points, snr_db)
     ylabel('Magnitude');
     grid on;
     
-    % 4. Normalized 16-point DFT
+    % 4. Normalized 16-point DFT (Network Input)
     subplot(3, 2, 4);
     stem(0:num_dft_points-1, example_data.dft_normalized, 'filled', 'LineWidth', 1.5, ...
          'Color', [0.8, 0.2, 0.2]);
-    title('16-Point DFT (Normalized)');
+    title('16-Point DFT (Normalized - Network Input)');
     xlabel('DFT Bin Index');
     ylabel('Normalized Magnitude');
     grid on;
