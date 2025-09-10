@@ -11,7 +11,7 @@ num_dft_points = 16;
 num_classes = 16; % 16 possible messages
 
 % SNR range for training - focus on realistic conditions
-SNR_dB_range = [0, 1, 2, 3, 5, 7, 10]; % Various noise levels
+SNR_dB_range = [0, 1, 2, 3, 5, 7, 10];
 samples_per_message = 200;
 total_samples = num_classes * samples_per_message * length(SNR_dB_range);
 
@@ -118,13 +118,15 @@ fprintf('Creating MCU-optimized neural network...\n');
 
 % Small network architecture suitable for low-power devices
 layers = [
-    featureInputLayer(num_dft_points, 'Name', 'input')  % 16 inputs
+    featureInputLayer(num_dft_points, 'Name', 'input') 
     
-    % Hidden layers (small for MCU)
-    fullyConnectedLayer(12, 'Name', 'fc1')  % Reduced from 64
+    % Hidden layers
+    fullyConnectedLayer(12, 'Name', 'fc1') 
+    batchNormalizationLayer('Name', 'bn1')
     reluLayer('Name', 'relu1')
     
-    fullyConnectedLayer(8, 'Name', 'fc2')   % Reduced from 32
+    fullyConnectedLayer(8, 'Name', 'fc2')
+    batchNormalizationLayer('Name', 'bn2')
     reluLayer('Name', 'relu2')
     
     % Output layer
@@ -141,7 +143,7 @@ options = trainingOptions('adam', ...
     'LearnRateSchedule', 'piecewise', ...
     'LearnRateDropFactor', 0.6, ...
     'LearnRateDropPeriod', 25, ...
-    'L2Regularization', 0.0005, ...  % Increased regularization
+    'L2Regularization', 0.001, ... 
     'Shuffle', 'every-epoch', ...
     'ValidationData', {XVal, YVal_cat}, ...
     'ValidationFrequency', 40, ...
