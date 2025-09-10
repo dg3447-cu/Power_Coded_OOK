@@ -2,7 +2,7 @@
 clc; clear; close all;
 
 % === LOAD TRAINED NETWORK ===
-load('mcu_optimized_classifier.mat'); % Loads net, X_mean, X_std, all_messages
+load('mcu_optimized_classifier.mat');
 
 % === TEST PARAMETERS ===
 num_tests = 16; % Test all 16 messages
@@ -140,9 +140,6 @@ function [features, noisy_env] = extract_features_mcu(message, snr_db, carrier_w
 end
 
 function plot_example_results(example_data, Fs, num_dft_points, snr_db)
-    % Plot results for the example data
-    figure('Name', 'MCU-Optimized Neural Network Test Results', 'NumberTitle', 'off', ...
-           'Position', [100, 100, 1000, 800]);
     
     % 1. Noisy Envelope Signal
     subplot(3, 2, 1);
